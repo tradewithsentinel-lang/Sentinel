@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       apiKey: process.env.ANTHROPIC_API_KEY,
     });
 
-    const formData = await request.formData();
+export const runtime = 'edge';
     const file = formData.get("file");
 
     if (!(file instanceof File)) {
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     }
 
     const csvText = await file.text();
-    const limitedCsv = csvText.slice(0, 120_000);
+const limitedCsv = csvText.slice(0, 30_000);
 
     const prompt = `You are Sentinel, an elite AI trading co-pilot built to identify the behavioral patterns destroying a trader's performance. You are direct, honest, and ruthlessly specific. Every claim must reference actual data from the CSV. No generic advice.
 
