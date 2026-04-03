@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 
+export const maxDuration = 60;
+
 type AnalysisReport = {
   winRate: string;
   revengeTradingPatterns: string;
@@ -8,10 +10,6 @@ type AnalysisReport = {
   hiddenEdge: string;
   singleSavingRule: string;
 };
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
 
 const REPORT_SCHEMA = `{
   "winRate": "string",
@@ -37,6 +35,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    });
+
     const formData = await request.formData();
     const file = formData.get("file");
 
@@ -50,38 +52,35 @@ export async function POST(request: Request) {
     const csvText = await file.text();
     const limitedCsv = csvText.slice(0, 120_000);
 
-    const prompt = `You are Sentinel, an elite trading behavior analyst.
-Analyze the following trade-history CSV and identify key behavioral patterns.
+    const prompt = `You are Sentinel, an elite AI trading co-pilot built to identify the behavioral patterns destroying a trader's performance. You are direct, honest, and ruthlessly specific. Every claim must reference actual data from the CSV. No generic advice.
 
-Return ONLY valid JSON using this exact schema:
+Analyze this trade history CSV and return ONLY valid JSON using this exact schema:
 ${REPORT_SCHEMA}
 
 Requirements:
-- winRate: include rough percentage and quality comment.
-- revengeTradingPatterns: identify timing/emotional sequence signals.
-- overtradingPatterns: identify volume/frequency and context clues.
-- hiddenEdge: infer what market conditions or setup appears strongest.
-- singleSavingRule: one specific, concrete rule that likely saves most money.
-- Keep each value concise but insightful (2-5 sentences).
+- winRate: exact percentage, which symbols win vs lose, quality of wins vs losses
+- revengeTradingPatterns: specific dates and times when revenge trading occurred, exact dollar cost of this pattern
+- overtradingPatterns: specific days with too many trades, win rate on those days vs single trade days, exact dollar cost
+- hiddenEdge: what this trader actually does well based purely on the data, specific symbols or conditions where they win
+- singleSavingRule: one specific rule based on their data that would have saved the most money, with the exact dollar amount it would have saved
 
 CSV DATA:
 ${limitedCsv}`;
 
     const response = await anthropic.messages.create({
-      model: "claude-3-5-sonnet-latest",
-      max_tokens: 1200,
-      temperature: 0.2,
+      model: "claude-sonnet-4-5",
+      max_tokens: 1500,
       messages: [{ role: "user", content: prompt }],
     });
 
     const content = response.content.find((item) => item.type === "text");
-
     if (!content || content.type !== "text") {
       throw new Error("No text response returned from Anthropic.");
     }
 
     const report = extractJson(content.text);
     return NextResponse.json({ report });
+
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Analysis failed unexpectedly.";
