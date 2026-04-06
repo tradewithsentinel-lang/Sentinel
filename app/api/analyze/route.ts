@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     const limitedCsv = csvText.slice(0, 20000);
 
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: 3000,
       messages: [{
         role: "user",
