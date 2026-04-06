@@ -18,22 +18,28 @@ export async function POST(request: Request) {
 
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-5",
-      max_tokens: 2000,
+      max_tokens: 3000,
       messages: [{
         role: "user",
-        content: `You are Sentinel, an elite trading behavioral analyst. Analyze this trade history CSV and write a detailed report.
+        content: `You are Sentinel — an elite trading behavioral analyst and co-pilot. Your job is not to describe what happened. Your job is to identify the exact patterns destroying this trader and give them specific, actionable rules to become profitable. Be ruthlessly honest. Reference exact dates and dollar amounts from the data. Do not use markdown asterisks or bullet points. Write in clear direct sentences.
 
-Use EXACTLY these section headers with the pipe character:
+Use EXACTLY these section headers followed by a pipe character:
 
-WIN_RATE| Write 3-4 sentences about win rate, which symbols win vs lose, quality of wins vs losses. Be specific with percentages and dollar amounts from the data.
+BEHAVIORAL_FINGERPRINT| Every trader has a specific destruction pattern. Identify this trader's named pattern — what specifically triggers their worst behavior, what the sequence looks like, how many times it repeated, and the total dollar cost of this one pattern. Give it a name. Example: "The MSTR Spiral." Be specific with dates and amounts. End with: PATTERN COST: $X across Y incidents.
 
-REVENGE_TRADING| Write 3-4 sentences identifying specific dates and sequences where revenge trading occurred. Include exact dollar cost of this pattern.
+TREND_ANALYSIS| Analyze whether each major symbol was traded with or against the prevailing trend by looking at win rate patterns. If a trader consistently loses on a symbol despite many attempts, they are likely trading counter-trend. If they win consistently on a symbol, they likely have trend alignment. For each major symbol state: WITH-TREND or COUNTER-TREND based on the evidence, their win rate on it, and what the data suggests about their directional bias. End with: TREND EDGE: the symbols where trend alignment is clear and profitable.
 
-OVERTRADING| Write 3-4 sentences about days with too many trades. Compare win rate on single trade days vs multi trade days. Include dollar cost.
+CONTRAST_REPORT| Show two versions of this trader. First: The Emotional Trader — what actually happened, total P&L, worst behaviors. Second: The Disciplined Trader — what would have happened if they applied three simple rules derived from their own data. Calculate the exact dollar difference between these two traders. This is the most important number in the report. End with: THE DIFFERENCE: $X — this is what discipline is worth to you specifically.
 
-HIDDEN_EDGE| Write 3-4 sentences about what this trader actually does well. Which symbols, which setups, what conditions produce wins.
+EDGE_MAP| Map exactly where this trader's edge lives. Green Zone: specific symbols, specific conditions, specific position sizes, specific days where they consistently win. Red Zone: specific symbols, conditions, and behaviors that consistently destroy money. Be precise. End with: TOMORROW'S FOCUS: exactly where to trade and where never to go.
 
-SINGLE_RULE| Write 2-3 sentences describing the one rule that would save the most money. Include the exact dollar amount it would have saved.
+TILT_DETECTOR| Identify the specific trigger conditions that precede this trader's worst losing sequences. Look for patterns: what happened in the 24-48 hours before their biggest drawdowns? Was it a large loss on a specific symbol? A winning streak followed by overconfidence? Identify the tilt trigger precisely. End with: TILT RULE: if X happens, mandatory Y action. Make it specific and non-negotiable.
+
+RECOVERY_BLUEPRINT| Find the period in this data where the trader performed at their absolute best. Analyze exactly what was different — fewer symbols, lower transaction counts, specific setups, specific symbols. Build a replicable blueprint from their own best performance. End with: YOUR WINNING FORMULA: the exact conditions to replicate.
+
+SENTINEL_SCORE| Give this trader a score from 0 to 100 based on: discipline (do they follow consistent rules), edge (do they have a profitable strategy when disciplined), recovery (do they stop losses or let them spiral), selectivity (do they wait for good setups or overtrade). Break down the score by category. End with: TO REACH [score+20]: the two specific changes that would most improve this score.
+
+DAILY_BRIEF| Based on everything above, write a personalized pre-market brief for this trader. Maximum 5 sentences. What to focus on today. What to avoid. How many trades maximum. What to do if they take a loss. This should read like a coach speaking directly to them before they open their platform.
 
 CSV DATA:
 ${limitedCsv}`
@@ -45,18 +51,39 @@ ${limitedCsv}`
 
     const text = content.text;
 
+    const sections = [
+      "BEHAVIORAL_FINGERPRINT",
+      "TREND_ANALYSIS",
+      "CONTRAST_REPORT",
+      "EDGE_MAP",
+      "TILT_DETECTOR",
+      "RECOVERY_BLUEPRINT",
+      "SENTINEL_SCORE",
+      "DAILY_BRIEF",
+    ];
+
     function extractSection(key: string): string {
-      const pattern = new RegExp(`${key}\\|([\\s\\S]*?)(?=WIN_RATE\\||REVENGE_TRADING\\||OVERTRADING\\||HIDDEN_EDGE\\||SINGLE_RULE\\||$)`);
-      const match = text.match(pattern);
-      return match ? match[1].trim() : "Analysis unavailable for this section.";
+      const idx = text.indexOf(`${key}|`);
+      if (idx === -1) return "Analysis unavailable.";
+      const start = idx + key.length + 1;
+      let end = text.length;
+      for (const other of sections) {
+        if (other === key) continue;
+        const otherIdx = text.indexOf(`${other}|`, start);
+        if (otherIdx !== -1 && otherIdx < end) end = otherIdx;
+      }
+      return text.slice(start, end).trim();
     }
 
     const report = {
-      winRate: extractSection("WIN_RATE"),
-      revengeTradingPatterns: extractSection("REVENGE_TRADING"),
-      overtradingPatterns: extractSection("OVERTRADING"),
-      hiddenEdge: extractSection("HIDDEN_EDGE"),
-      singleSavingRule: extractSection("SINGLE_RULE"),
+      behavioralFingerprint: extractSection("BEHAVIORAL_FINGERPRINT"),
+      trendAnalysis: extractSection("TREND_ANALYSIS"),
+      contrastReport: extractSection("CONTRAST_REPORT"),
+      edgeMap: extractSection("EDGE_MAP"),
+      tiltDetector: extractSection("TILT_DETECTOR"),
+      recoveryBlueprint: extractSection("RECOVERY_BLUEPRINT"),
+      sentinelScore: extractSection("SENTINEL_SCORE"),
+      dailyBrief: extractSection("DAILY_BRIEF"),
     };
 
     return NextResponse.json({ report });
