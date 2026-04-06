@@ -3,20 +3,6 @@ import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
-const SYSTEM_PROMPT = `You are Sentinel, an elite trading analyst. Analyze this CSV and return ONLY valid JSON. Keep all string values concise — under 100 words each.
-
-Return this exact structure:
-{"traderName":"Trader","reportTitle":"Sentinel Trading Analysis Report","dateRange":"X","overview":{"startingCapital":"$X","finalBalance":"$X","totalReturn":"+$X (Y%)","duration":"X months","totalTrades":0,"winningTrades":0,"losingTrades":0},"overallScore":5.0,"categoryScores":[{"category":"Win Rate","score":6,"maxScore":10,"observation":"brief note"},{"category":"Loss Discipline","score":5,"maxScore":10,"observation":"brief note"},{"category":"Position Sizing","score":5,"maxScore":10,"observation":"brief note"},{"category":"Patience","score":5,"maxScore":10,"observation":"brief note"},{"category":"Consistency","score":5,"maxScore":10,"observation":"brief note"}],"performanceStats":{"winRate":"X%","avgWinningTrade":"+$X","avgLosingTrade":"-$X","bestSingleTrade":"+$X","worstSingleTrade":"-$X","largestSingleDay":"+$X","maxDrawdown":"-X%","recoveryFromLow":"+$X"},"accountMilestones":[{"date":"X","event":"X","balance":"$X","changeFromStart":"X%"}],"symbolBreakdown":[{"ticker":"X","trades":0,"totalPnl":"+$X","notes":"brief","profitable":true}],"tradingMethodology":{"summary":"Two sentences max.","principles":[{"principle":"X","description":"brief"}]},"behavioralStrengths":["one sentence each"],"behavioralWeaknesses":["one sentence each"],"criticalTrades":[{"trade":"X","loss":"-$X","percentOfTotalLosses":"X%","whatWentWrong":"brief"}],"phaseAnalysis":[{"phase":"X","period":"X","trades":0,"winLoss":"XW/YL","winRate":"X%","pnl":"+$X"}],"benchmarkComparison":[{"traderType":"Average retail","typicalWinRate":"40-50%","annualReturn":"Negative","vsThisTrader":"Below"},{"traderType":"This trader","typicalWinRate":"X%","annualReturn":"X%","vsThisTrader":"—"}],"finalVerdict":"Two sentences max.","sentinelRule":"One specific rule with dollar amount."}
-
-Be specific with numbers. Keep text fields brief.`;
-
-function extractJson(text: string) {
-  const cleaned = text.replace(/```json|```/g, "").trim();
-  const match = cleaned.match(/\{[\s\S]*\}/);
-  const jsonText = match ? match[0] : cleaned;
-  return JSON.parse(jsonText);
-}
-
 export async function POST(request: Request) {
   try {
     const anthropic = new Anthropic({
@@ -25,32 +11,54 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
     const file = formData.get("file") as File;
-
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-    }
+    if (!file) return NextResponse.json({ error: "No file" }, { status: 400 });
 
     const csvText = await file.text();
-    const limitedCsv = csvText.slice(0, 25000);
+    const limitedCsv = csvText.slice(0, 20000);
 
     const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 1500,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: `Analyze this trade history and return JSON only:\n\n${limitedCsv}`
-        }
-      ],
+      model: "claude-sonnet-4-5",
+      max_tokens: 2000,
+      messages: [{
+        role: "user",
+        content: `You are Sentinel, an elite trading behavioral analyst. Analyze this trade history CSV and write a detailed report.
+
+Use EXACTLY these section headers with the pipe character:
+
+WIN_RATE| Write 3-4 sentences about win rate, which symbols win vs lose, quality of wins vs losses. Be specific with percentages and dollar amounts from the data.
+
+REVENGE_TRADING| Write 3-4 sentences identifying specific dates and sequences where revenge trading occurred. Include exact dollar cost of this pattern.
+
+OVERTRADING| Write 3-4 sentences about days with too many trades. Compare win rate on single trade days vs multi trade days. Include dollar cost.
+
+HIDDEN_EDGE| Write 3-4 sentences about what this trader actually does well. Which symbols, which setups, what conditions produce wins.
+
+SINGLE_RULE| Write 2-3 sentences describing the one rule that would save the most money. Include the exact dollar amount it would have saved.
+
+CSV DATA:
+${limitedCsv}`
+      }],
     });
 
     const content = response.content[0];
-    if (content.type !== "text") {
-      throw new Error("No text response");
+    if (content.type !== "text") throw new Error("No text response");
+
+    const text = content.text;
+
+    function extractSection(key: string): string {
+      const pattern = new RegExp(`${key}\\|([\\s\\S]*?)(?=WIN_RATE\\||REVENGE_TRADING\\||OVERTRADING\\||HIDDEN_EDGE\\||SINGLE_RULE\\||$)`);
+      const match = text.match(pattern);
+      return match ? match[1].trim() : "Analysis unavailable for this section.";
     }
 
-    const report = extractJson(content.text);
+    const report = {
+      winRate: extractSection("WIN_RATE"),
+      revengeTradingPatterns: extractSection("REVENGE_TRADING"),
+      overtradingPatterns: extractSection("OVERTRADING"),
+      hiddenEdge: extractSection("HIDDEN_EDGE"),
+      singleSavingRule: extractSection("SINGLE_RULE"),
+    };
+
     return NextResponse.json({ report });
 
   } catch (error) {
